@@ -20,9 +20,9 @@ void task3() {
 }
 
 int main() {
-    co_create("task1", task1);
-    co_create("task2", task2);
-    co_create("task3", task3);
+    co_create(task1, 0);
+    co_create(task2, 0);
+    co_create(task3, 0);
     co_run();
 }
 

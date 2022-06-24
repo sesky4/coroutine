@@ -1,5 +1,7 @@
-#include <stdlib.h>
+#pragma once
+
 #include <stdint.h>
+#include <sys/socket.h>
 
 typedef struct Context
 {
@@ -22,91 +24,39 @@ typedef struct Context
     uint64_t rip;
 } Context;
 
-extern int co_get_ctx(Context *);
+int co_get_ctx(Context *);
 
-extern void co_set_ctx(Context *);
+void co_set_ctx(Context *);
 
 typedef struct Task
 {
     char *name;
     Context ctx;
 
-    void (*entrypoint)();
+    void (*entrypoint)(void *);
+
+    void *arg;
 
     struct Task *next;
 } Task;
 
+void _co_create(char *name, void(*fn)(void *), void *arg);
 
-static Task *task_cur = NULL;
-static Task *task_ready = NULL;
-static Context ctx_main;
+#define co_create(fn, arg) _co_create(#fn, fn, arg)
 
-Task *co_get_last_ready() {
-    Task *last = task_ready;
-    while (last->next != NULL)
-        last = last->next;
-    return last;
-}
+// return ready task count
+int co_yield();
 
-void co_set_ready(Task *t) {
-    if (task_ready == NULL)
-    {
-        task_ready = t;
-    }
-    else
-    {
-        co_get_last_ready()->next = t;
-    }
-}
+void co_run();
 
-void co_swap(Context *from, Context *to) {
-    if (co_get_ctx(from) == 0)
-    {
-        co_set_ctx(to);
-    }
-}
+void co_mark_read(int fd, Task *task);
 
-void co_exit() {
-    Context _;
-    co_swap(&_, &ctx_main);
-}
+void co_mark_write(int fd, Task *task);
 
-void co_create(char *name, void(*fn)()) {
-    Task *t = (Task *) malloc(sizeof(Task));
-    t->name = name;
-    t->entrypoint = fn;
-    t->next = NULL;
-    t->ctx.rip = (uint64_t) fn;
+ssize_t co_read(int fd, void *buf, size_t count);
 
-    // create stack
-    uint64_t stack_size = 4096;
-    uint64_t sp = (uint64_t) malloc(stack_size);
-    sp += stack_size - 8;
-    *((uint64_t *) sp) = (uint64_t) co_exit;
-    t->ctx.rsp = sp;
+ssize_t co_write(int fd, const void *buf, size_t count);
 
-    co_set_ready(t);
-}
+ssize_t co_accept(int fd, struct sockaddr *restrict addr, socklen_t *restrict addrlen);
 
-
-void co_yield() {
-    co_set_ready(task_cur);
-    co_swap(&task_cur->ctx, &ctx_main);
-}
-
-void co_run() {
-    while (1)
-    {
-        if (task_ready == NULL)
-        {
-            printf("no task ready\n");
-            return;
-        }
-
-        task_cur = task_ready;
-        task_ready = task_ready->next;
-        task_cur->next = NULL;
-
-        co_swap(&ctx_main, &task_cur->ctx);
-    }
-}
+void co_io_init();
